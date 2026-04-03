@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        />
+        <title>QR Scanner</title>
+        <style>
+            @import url("https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap");
+
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                --bg: #0a0a0f;
+                --surface: #12121a;
+                --border: #1e1e2e;
+                --accent: #00f5c4;
+                --text: #e8e8f0;
+                --muted: #555570;
+            }
+
+            html,
+            body {
+                height: 100%;
+                background: var(--bg);
+                color: var(--text);
+                font-family: "Syne", sans-serif;
+                overflow-x: hidden;
+            }
+
+            body::before {
+                content: "";
+                position: fixed;
+                inset: 0;
+                pointer-events: none;
+                z-index: 0;
+                opacity: 0.4;
+                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+            }
+
+            .app {
+                position: relative;
+                z-index: 1;
+                min-height: 100dvh;
+                display: flex;
+                flex-direction: column;
+                padding-bottom: 2rem;
+            }
+
+            header {
+                padding: 1.25rem 1.25rem 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .logo {
+                width: 34px;
+                height: 34px;
+                background: var(--accent);
+                border-radius: 8px;
+                display: grid;
+                place-items: center;
+                flex-shrink: 0;
+            }
+            .logo svg {
+                width: 18px;
+                height: 18px;
+            }
+
+            header h1 {
+                font-size: 1.05rem;
+                font-weight: 800;
+                letter-spacing: -0.02em;
+            }
+            header small {
+                display: block;
+                font-size: 0.6rem;
+                color: var(--muted);
+                font-family: "Space Mono", monospace;
+                letter-spacing: 0.05em;
+                margin-top: 2px;
+            }
+
+            .ws-badge {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 0.6rem;
+                font-family: "Space Mono", monospace;
+                color: var(--muted);
+                letter-spacing: 0.05em;
+            }
+
+            .ws-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--muted);
+                transition: background 0.3s;
+            }
+
+            .ws-dot.on {
+                background: var(--accent);
+                box-shadow: 0 0 6px var(--accent);
+                animation: wsPulse 2s infinite;
+            }
+
+            @keyframes wsPulse {
+                0%,
+                100% {
+                    box-shadow: 0 0 6px var(--accent);
+                }
+                50% {
+                    box-shadow: 0 0 14px var(--accent);
+                }
+            }
+
+            /* Camera */
+            .camera-wrap {
+                position: relative;
+                margin: 1.25rem 1.25rem 0;
+                border-radius: 20px;
+                overflow: hidden;
+                background: #000;
+                aspect-ratio: 1/1;
+                border: 1px solid var(--border);
+            }
+
+            #video {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
+            }
+            #canvas {
+                display: none;
+            }
+
+            .guide,
+            .guide-b {
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+            }
+            .guide::before,
+            .guide::after,
+            .guide-b::before,
+            .guide-b::after {
+                content: "";
+                position: absolute;
+                width: 30px;
+                height: 30px;
+                border-color: var(--accent);
+                border-style: solid;
+                opacity: 0.85;
+            }
+            .guide::before {
+                top: 14px;
+                left: 14px;
+                border-width: 2px 0 0 2px;
+                border-radius: 5px 0 0 0;
+            }
+            .guide::after {
+                top: 14px;
+                right: 14px;
+                border-width: 2px 2px 0 0;
+                border-radius: 0 5px 0 0;
+            }
+            .guide-b::before {
+                bottom: 14px;
+                left: 14px;
+                border-width: 0 0 2px 2px;
+                border-radius: 0 0 0 5px;
+            }
+            .guide-b::after {
+                bottom: 14px;
+                right: 14px;
+                border-width: 0 2px 2px 0;
+                border-radius: 0 0 5px 0;
+            }
+
+            .scan-line {
+                position: absolute;
+                left: 12px;
+                right: 12px;
+                height: 2px;
+                background: linear-gradient(
+                    90deg,
+                    transparent,
+                    var(--accent),
+                    transparent
+                );
+                border-radius: 999px;
+                box-shadow: 0 0 10px var(--accent);
+                animation: scanMove 2.4s ease-in-out infinite;
+                opacity: 0.75;
+            }
+            @keyframes scanMove {
+                0% {
+                    top: 14px;
+                    opacity: 0;
+                }
+                10% {
+                    opacity: 0.75;
+                }
+                90% {
+                    opacity: 0.75;
+                }
+                100% {
+                    top: calc(100% - 16px);
+                    opacity: 0;
+                }
+            }
+
+            .flash {
+                position: absolute;
+                inset: 0;
+                background: var(--accent);
+                opacity: 0;
+                pointer-events: none;
+                border-radius: inherit;
+            }
+            .flash.pop {
+                animation: flashPop 0.35s ease-out forwards;
+            }
+            @keyframes flashPop {
+                0% {
+                    opacity: 0.45;
+                }
+                100% {
+                    opacity: 0;
+                }
+            }
+
+            .cam-placeholder {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 0.7rem;
+                background: var(--surface);
+                transition: opacity 0.4s;
+            }
+            .cam-placeholder.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .cam-placeholder svg {
+                width: 44px;
+                height: 44px;
+                color: var(--muted);
+                animation: pulse 2s ease-in-out infinite;
+            }
+            @keyframes pulse {
+                0%,
+                100% {
+                    opacity: 0.4;
+                    transform: scale(1);
+                }
+                50% {
+                    opacity: 0.9;
+                    transform: scale(1.05);
+                }
+            }
+            .cam-placeholder p {
+                font-size: 0.78rem;
+                color: var(--muted);
+                text-align: center;
+                max-width: 180px;
+                line-height: 1.5;
+            }
+
+            /* Sent indicator */
+            .sent-bar {
+                margin: 0.9rem 1.25rem 0;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                padding: 0.85rem 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.7rem;
+                opacity: 0;
+                transform: translateY(4px);
+                transition:
+                    opacity 0.3s,
+                    transform 0.3s,
+                    border-color 0.3s;
+            }
+            .sent-bar.show {
+                opacity: 1;
+                transform: translateY(0);
+                border-color: var(--accent);
+            }
+
+            .sent-icon {
+                width: 28px;
+                height: 28px;
+                border-radius: 8px;
+                background: rgba(0, 245, 196, 0.12);
+                display: grid;
+                place-items: center;
+                flex-shrink: 0;
+            }
+            .sent-icon svg {
+                width: 15px;
+                height: 15px;
+                color: var(--accent);
+            }
+
+            .sent-label {
+                font-size: 0.65rem;
+                color: var(--muted);
+                font-family: "Space Mono", monospace;
+                letter-spacing: 0.05em;
+            }
+            .sent-value {
+                font-size: 0.85rem;
+                font-weight: 700;
+                color: var(--text);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            /* Display link card */
+            .link-card {
+                margin: 1rem 1.25rem 0;
+                background: rgba(0, 245, 196, 0.05);
+                border: 1px dashed rgba(0, 245, 196, 0.25);
+                border-radius: 14px;
+                padding: 0.85rem 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.7rem;
+            }
+            .link-card svg {
+                flex-shrink: 0;
+                color: var(--accent);
+                opacity: 0.7;
+            }
+            .link-card p {
+                font-size: 0.75rem;
+                color: var(--muted);
+                line-height: 1.5;
+                font-family: "Space Mono", monospace;
+            }
+            .link-card strong {
+                color: var(--accent);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="app">
+            <header>
+                <div class="logo">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#0a0a0f"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                        <rect x="14" y="14" width="3" height="3" />
+                        <rect x="18" y="14" width="3" height="3" />
+                        <rect x="14" y="18" width="7" height="3" />
+                    </svg>
+                </div>
+                <div>
+                    <h1>QR Scanner</h1>
+                    <small>SCANNER MODE</small>
+                </div>
+                <div class="ws-badge">
+                    <div class="ws-dot" id="wsDot"></div>
+                    <span id="wsLabel">connecting</span>
+                </div>
+            </header>
+
+            <div class="camera-wrap">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas id="canvas"></canvas>
+                <div class="guide"></div>
+                <div class="guide-b"></div>
+                <div class="scan-line"></div>
+                <div class="flash" id="flash"></div>
+                <div class="cam-placeholder" id="placeholder">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                    >
+                        <path
+                            d="M15 3h4a2 2 0 0 1 2 2v4m0 6v4a2 2 0 0 1-2 2h-4M9 3H5a2 2 0 0 0-2 2v4m0 6v4a2 2 0 0 0 2 2h4"
+                        />
+                        <rect x="9" y="9" width="6" height="6" rx="1" />
+                    </svg>
+                    <p id="placeholderMsg">Requesting camera…</p>
+                </div>
+            </div>
+
+            <!-- Last sent result -->
+            <div class="sent-bar" id="sentBar">
+                <div class="sent-icon">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M22 2 11 13" />
+                        <path d="M22 2 15 22 11 13 2 9l20-7z" />
+                    </svg>
+                </div>
+                <div style="overflow: hidden">
+                    <div class="sent-label">BROADCAST SENT</div>
+                    <div class="sent-value" id="sentValue"></div>
+                </div>
+            </div>
+
+            <!-- Info card -->
+            <div class="link-card">
+                <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v4m0 4h.01" />
+                </svg>
+                <p>
+                    Open <strong>/display</strong> on any other phone to see
+                    scan results instantly.
+                </p>
+            </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+        <script>
+            const video = document.getElementById("video");
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            const placeholder = document.getElementById("placeholder");
+            const placeholderMsg = document.getElementById("placeholderMsg");
+            const flash = document.getElementById("flash");
+            const sentBar = document.getElementById("sentBar");
+            const sentValue = document.getElementById("sentValue");
+            const wsDot = document.getElementById("wsDot");
+            const wsLabel = document.getElementById("wsLabel");
+
+            let lastResult = "";
+            let cooldown = false;
+
+            // ── WebSocket ──
+            const socket = io();
+
+            socket.on("connect", () => {
+                wsDot.classList.add("on");
+                wsLabel.textContent = "live";
+            });
+            socket.on("disconnect", () => {
+                wsDot.classList.remove("on");
+                wsLabel.textContent = "offline";
+            });
+
+            // ── Camera ──
+            async function startCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { exact: "environment" },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                        },
+                        audio: false,
+                    });
+                    initVideo(stream);
+                } catch {
+                    try {
+                        const stream =
+                            await navigator.mediaDevices.getUserMedia({
+                                video: true,
+                                audio: false,
+                            });
+                        initVideo(stream);
+                    } catch {
+                        placeholderMsg.textContent =
+                            "Camera access denied. Please allow in browser settings.";
+                    }
+                }
+            }
+
+            function initVideo(stream) {
+                video.srcObject = stream;
+                video.addEventListener("loadedmetadata", () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    placeholder.classList.add("hidden");
+                    requestAnimationFrame(tick);
+                });
+            }
+
+            // ── Scan loop ──
+            function tick() {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(
+                        0,
+                        0,
+                        canvas.width,
+                        canvas.height,
+                    );
+                    const code = jsQR(
+                        imageData.data,
+                        imageData.width,
+                        imageData.height,
+                        { inversionAttempts: "dontInvert" },
+                    );
+                    if (code && code.data && !cooldown) onDetected(code.data);
+                }
+                requestAnimationFrame(tick);
+            }
+
+            // ── Detected ──
+            function onDetected(data) {
+                if (data === lastResult) return;
+                lastResult = data;
+                cooldown = true;
+
+                // Flash
+                flash.classList.remove("pop");
+                void flash.offsetWidth;
+                flash.classList.add("pop");
+
+                if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+
+                // Detect type
+                let type = "TEXT";
+                try {
+                    const u = new URL(data);
+                    type =
+                        u.protocol === "mailto:"
+                            ? "EMAIL"
+                            : u.protocol === "tel:"
+                              ? "PHONE"
+                              : "URL";
+                } catch {
+                    if (/^[^@]+@[^@]+\.[^@]+$/.test(data)) type = "EMAIL";
+                    else if (/^\+?[\d\s\-()+]{7,}$/.test(data)) type = "PHONE";
+                    else if (data.startsWith("WIFI:")) type = "WIFI";
+                    else if (data.startsWith("BEGIN:VCARD")) type = "CONTACT";
+                }
+
+                // Emit to server → broadcast to all displays
+                socket.emit("qr_scanned", { data, type, ts: Date.now() });
+
+                // Show sent bar
+                sentValue.textContent = data;
+                sentBar.classList.add("show");
+
+                setTimeout(() => {
+                    cooldown = false;
+                    lastResult = "";
+                }, 1000);
+            }
+
+            startCamera();
+        </script>
+    </body>
+</html>

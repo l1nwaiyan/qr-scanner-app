@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        />
+        <title>QR Display</title>
+
+        <!-- Socket -->
+        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+        <!-- QR Generator -->
+        <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+
+        <style>
+            /* (KEEP YOUR ORIGINAL CSS — unchanged) */
+            /* Only add this small QR style */
+
+            #qrCode {
+                display: flex;
+                justify-content: center;
+                margin-bottom: 1.25rem;
+            }
+
+            #qrCode canvas {
+                border-radius: 12px;
+            }
+
+            .result-data {
+                word-break: break-all;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="app">
+            <header>
+                <div class="logo"></div>
+                <div>
+                    <h1>QR Display</h1>
+                    <small>DISPLAY MODE</small>
+                </div>
+                <div class="ws-badge">
+                    <div class="ws-dot" id="wsDot"></div>
+                    <span id="wsLabel">connecting</span>
+                </div>
+            </header>
+
+            <!-- Waiting -->
+            <div class="waiting" id="waiting">
+                <h2>Awaiting scan…</h2>
+            </div>
+
+            <!-- Result view -->
+            <div class="result-view" id="resultView">
+                <div class="big-card" id="bigCard">
+                    <div class="type-row">
+                        <div class="type-badge" id="typeBadge">TEXT</div>
+                        <div class="time-ago" id="timeAgo"></div>
+                    </div>
+
+                    <div class="result-data" id="resultData"></div>
+
+                    <!-- ✅ QR CODE HERE -->
+                    <div id="qrCode"></div>
+
+                    <div class="action-row">
+                        <button
+                            class="btn btn-primary"
+                            id="openBtn"
+                            style="display: none"
+                        >
+                            Open Link
+                        </button>
+                        <button class="btn btn-ghost" id="copyBtn">Copy</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const waiting = document.getElementById("waiting");
+            const resultView = document.getElementById("resultView");
+            const resultData = document.getElementById("resultData");
+            const typeBadge = document.getElementById("typeBadge");
+            const timeAgo = document.getElementById("timeAgo");
+            const openBtn = document.getElementById("openBtn");
+            const copyBtn = document.getElementById("copyBtn");
+            const wsDot = document.getElementById("wsDot");
+            const wsLabel = document.getElementById("wsLabel");
+            const qrCodeContainer = document.getElementById("qrCode");
+            let lastQRData = "";
+
+            let qrInstance;
+            let tsInterval;
+
+            const socket = io();
+
+            socket.on("connect", () => {
+                wsDot.classList.add("on");
+                wsLabel.textContent = "live";
+            });
+
+            socket.on("disconnect", () => {
+                wsDot.classList.remove("on");
+                wsLabel.textContent = "offline";
+            });
+
+            socket.on("qr_result", (payload) => {
+                showResult(payload);
+            });
+
+            function showResult(payload) {
+                const { data, type, ts } = payload;
+
+                // TEXT DISPLAY
+                resultData.textContent = data;
+
+                // TYPE BADGE
+                typeBadge.textContent = type;
+
+                // URL CHECK
+                if (type === "URL") {
+                    openBtn.style.display = "inline-block";
+                    openBtn.onclick = () => window.open(data, "_blank");
+                } else {
+                    openBtn.style.display = "none";
+                }
+
+                // COPY
+                copyBtn.onclick = () => navigator.clipboard.writeText(data);
+
+                // TIME
+                updateTimeAgo(ts);
+                clearInterval(tsInterval);
+                tsInterval = setInterval(() => updateTimeAgo(ts), 15000);
+
+                // SHOW UI
+                waiting.style.display = "none";
+                resultView.style.opacity = "1";
+                resultView.style.pointerEvents = "all";
+
+                // ✅ QR GENERATION (INSTANT REPLACE)
+                // ✅ Only update if data changed
+                if (data !== lastQRData) {
+                    lastQRData = data;
+
+                    qrCodeContainer.innerHTML = "";
+
+                    new QRCode(qrCodeContainer, {
+                        text: data,
+                        width: 600,
+                        height: 600,
+                        useSVG: true,
+                    });
+                }
+            }
+
+            function updateTimeAgo(ts) {
+                if (!ts) return;
+                const diff = Math.floor((Date.now() - ts) / 1000);
+
+                if (diff < 5) timeAgo.textContent = "just now";
+                else if (diff < 60) timeAgo.textContent = diff + "s ago";
+                else timeAgo.textContent = Math.floor(diff / 60) + "m ago";
+            }
+        </script>
+    </body>
+</html>
