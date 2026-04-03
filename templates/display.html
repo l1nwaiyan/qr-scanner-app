@@ -7,95 +7,556 @@
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
         <title>QR Display</title>
-
-        <!-- Socket -->
         <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
-        <!-- QR Generator -->
         <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
-
         <style>
-            /* (KEEP YOUR ORIGINAL CSS — unchanged) */
-            /* Only add this small QR style */
+            @import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap");
 
-            #qrCode {
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                --purple: #5b3fd4;
+                --purple-dark: #4328b0;
+                --purple-mid: #6b52d8;
+                --pink: #e040a0;
+                --pink-light: #f472b6;
+                --bg: #5b3fd4;
+                --card: #ffffff;
+                --text-dark: #1a1a2e;
+                --text-mid: #555;
+                --text-light: #888;
+                --timer-bg: #f0f0f5;
+                --timer-val: #e040a0;
+            }
+
+            html,
+            body {
+                min-height: 100%;
+                background: var(--bg);
+                font-family: "Nunito", sans-serif;
+                overflow-x: hidden;
+            }
+
+            /* ── App shell ── */
+            .app {
+                min-height: 100dvh;
+                display: flex;
+                flex-direction: column;
+                background: linear-gradient(160deg, #6b4de6 0%, #4328b0 100%);
+            }
+
+            /* ── Top bar ── */
+            .topbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 1rem 1.25rem 0.85rem;
+            }
+
+            .topbar-title {
+                color: #fff;
+                font-size: 1.05rem;
+                font-weight: 700;
+                letter-spacing: 0.01em;
+                text-align: center;
+                flex: 1;
+            }
+
+            .close-btn {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                border: none;
+                background: rgba(255, 255, 255, 0.2);
+                color: #fff;
+                font-size: 1.1rem;
+                cursor: pointer;
+                display: grid;
+                place-items: center;
+                line-height: 1;
+            }
+
+            .ws-indicator {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 0.6rem;
+                font-weight: 700;
+                color: rgba(255, 255, 255, 0.6);
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+            .ws-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.3);
+                transition: background 0.3s;
+            }
+            .ws-dot.on {
+                background: #7fff9f;
+                box-shadow: 0 0 6px #7fff9f;
+            }
+
+            /* ── Ticket card ── */
+            .ticket-card {
+                margin: 0 0.75rem 0.75rem;
+                background: var(--card);
+                border-radius: 20px;
+                overflow: hidden;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+            }
+
+            /* ── Waiting state ── */
+            .waiting-state {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 1rem;
+                padding: 2rem;
+            }
+
+            .waiting-state .spin-ring {
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                border: 3px solid #eee;
+                border-top-color: var(--purple);
+                animation: spin 1s linear infinite;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .waiting-state p {
+                color: var(--text-light);
+                font-size: 0.9rem;
+                font-weight: 600;
+                text-align: center;
+            }
+
+            /* ── Ticket content ── */
+            .ticket-content {
+                display: none;
+                flex-direction: column;
+                flex: 1;
+            }
+            .ticket-content.visible {
+                display: flex;
+            }
+
+            /* QR section */
+            .qr-section {
+                padding: 1.5rem 1.5rem 1rem;
                 display: flex;
                 justify-content: center;
-                margin-bottom: 1.25rem;
+                align-items: center;
             }
 
+            #qrCode {
+                width: 100%;
+                max-width: 260px;
+                aspect-ratio: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            #qrCode img,
             #qrCode canvas {
-                border-radius: 12px;
+                width: 100% !important;
+                height: 100% !important;
+                border-radius: 4px;
             }
 
-            .result-data {
-                word-break: break-all;
+            /* ── Timer section ── */
+            .timer-section {
+                padding: 0 1.25rem 1rem;
+            }
+
+            .timer-labels {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 0.5rem;
+                margin-bottom: 0.4rem;
+            }
+
+            .timer-label {
+                text-align: center;
+                font-size: 0.65rem;
+                font-weight: 700;
+                color: var(--pink);
+                letter-spacing: 0.04em;
+                text-transform: capitalize;
+            }
+
+            .timer-values {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 0.5rem;
+            }
+
+            .timer-box {
+                background: var(--timer-bg);
+                border-radius: 10px;
+                padding: 0.5rem 0.25rem;
+                text-align: center;
+                font-size: 1.4rem;
+                font-weight: 900;
+                color: var(--pink);
+            }
+
+            /* Seconds box with circular progress */
+            .seconds-box {
+                position: relative;
+                background: transparent !important;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .seconds-ring {
+                position: relative;
+                width: 56px;
+                height: 56px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .seconds-ring svg {
+                position: absolute;
+                top: 0;
+                left: 0;
+                transform: rotate(-90deg);
+            }
+
+            .seconds-ring svg circle {
+                fill: none;
+                stroke-width: 3;
+            }
+
+            .sec-track {
+                stroke: #e8e8f0;
+            }
+            .sec-progress {
+                stroke: var(--pink);
+                stroke-linecap: round;
+                transition: stroke-dashoffset 0.9s linear;
+            }
+
+            .seconds-num {
+                position: relative;
+                z-index: 1;
+                font-size: 1.35rem;
+                font-weight: 900;
+                color: var(--pink);
+            }
+
+            /* ── Live clock ── */
+            .live-clock-wrap {
+                margin: 0 1.25rem 0.85rem;
+                border-radius: 12px;
+                overflow: hidden;
+                position: relative;
+                height: 62px;
+                background: #1a1040;
+            }
+
+            /* Animated iridescent background */
+            .clock-bg {
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(
+                    135deg,
+                    #8b2fc9 0%,
+                    #5b3fd4 20%,
+                    #2563eb 40%,
+                    #b91c5e 60%,
+                    #7c3aed 80%,
+                    #1e3a8a 100%
+                );
+                background-size: 300% 300%;
+                animation: bgShift 4s ease-in-out infinite alternate;
+                opacity: 0.85;
+            }
+
+            /* Hexagonal pattern overlay */
+            .clock-bg::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpolygon points='14,2 24,8 24,20 14,26 4,20 4,8' fill='none' stroke='rgba(255,255,255,0.12)' stroke-width='1'/%3E%3C/svg%3E");
+                background-size: 28px 28px;
+            }
+
+            @keyframes bgShift {
+                0% {
+                    background-position: 0% 50%;
+                }
+                100% {
+                    background-position: 100% 50%;
+                }
+            }
+
+            .live-clock {
+                position: relative;
+                z-index: 1;
+                font-size: 2.2rem;
+                font-weight: 900;
+                color: #fff;
+                text-align: center;
+                line-height: 62px;
+                letter-spacing: 0.06em;
+                text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+            }
+
+            /* ── Ticket type banner ── */
+            .ticket-type-banner {
+                margin: 0 1.25rem 1rem;
+                background: var(--purple);
+                border-radius: 12px;
+                padding: 0.7rem 1rem;
+                text-align: center;
+                color: #fff;
+                font-size: 1.05rem;
+                font-weight: 800;
+                letter-spacing: 0.01em;
+                line-height: 1.3;
+            }
+
+            /* ── Passenger info ── */
+            .info-section {
+                padding: 0 1.25rem 1.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .info-row {
+                display: flex;
+                gap: 0.4rem;
+                font-size: 0.85rem;
+                color: var(--text-dark);
+            }
+
+            .info-row strong {
+                font-weight: 800;
+                min-width: 80px;
+            }
+            .info-row span {
+                color: var(--text-mid);
+                font-weight: 600;
             }
         </style>
     </head>
-
     <body>
         <div class="app">
-            <header>
-                <div class="logo"></div>
-                <div>
-                    <h1>QR Display</h1>
-                    <small>DISPLAY MODE</small>
-                </div>
-                <div class="ws-badge">
+            <!-- Top bar -->
+            <div class="topbar">
+                <div class="ws-indicator">
                     <div class="ws-dot" id="wsDot"></div>
                     <span id="wsLabel">connecting</span>
                 </div>
-            </header>
-
-            <!-- Waiting -->
-            <div class="waiting" id="waiting">
-                <h2>Awaiting scan…</h2>
+                <div class="topbar-title">Ticket 1 of 1</div>
+                <button class="close-btn">✕</button>
             </div>
 
-            <!-- Result view -->
-            <div class="result-view" id="resultView">
-                <div class="big-card" id="bigCard">
-                    <div class="type-row">
-                        <div class="type-badge" id="typeBadge">TEXT</div>
-                        <div class="time-ago" id="timeAgo"></div>
+            <!-- Ticket card -->
+            <div class="ticket-card">
+                <!-- Waiting -->
+                <div class="waiting-state" id="waitingState">
+                    <div class="spin-ring"></div>
+                    <p>Awaiting scan from scanner phone…</p>
+                </div>
+
+                <!-- Ticket content -->
+                <div class="ticket-content" id="ticketContent">
+                    <!-- QR Code -->
+                    <div class="qr-section">
+                        <div id="qrCode"></div>
                     </div>
 
-                    <div class="result-data" id="resultData"></div>
+                    <!-- Countdown timer -->
+                    <div class="timer-section">
+                        <div class="timer-labels">
+                            <div class="timer-label">Days</div>
+                            <div class="timer-label">Hours</div>
+                            <div class="timer-label">Minutes</div>
+                            <div class="timer-label">Seconds</div>
+                        </div>
+                        <div class="timer-values">
+                            <div class="timer-box" id="tDays">22</div>
+                            <div class="timer-box" id="tHours">9</div>
+                            <div class="timer-box" id="tMins">26</div>
+                            <div class="timer-box seconds-box">
+                                <div class="seconds-ring">
+                                    <svg
+                                        width="56"
+                                        height="56"
+                                        viewBox="0 0 56 56"
+                                    >
+                                        <circle
+                                            class="sec-track"
+                                            cx="28"
+                                            cy="28"
+                                            r="24"
+                                        />
+                                        <circle
+                                            class="sec-progress"
+                                            id="secRing"
+                                            cx="28"
+                                            cy="28"
+                                            r="24"
+                                            stroke-dasharray="150.796"
+                                            stroke-dashoffset="0"
+                                        />
+                                    </svg>
+                                    <span class="seconds-num" id="tSecs"
+                                        >25</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                    <!-- ✅ QR CODE HERE -->
-                    <div id="qrCode"></div>
+                    <!-- Animated live clock -->
+                    <div class="live-clock-wrap">
+                        <div class="clock-bg"></div>
+                        <div class="live-clock" id="liveClock">17:33</div>
+                    </div>
 
-                    <div class="action-row">
-                        <button
-                            class="btn btn-primary"
-                            id="openBtn"
-                            style="display: none"
-                        >
-                            Open Link
-                        </button>
-                        <button class="btn btn-ghost" id="copyBtn">Copy</button>
+                    <!-- Ticket type -->
+                    <div class="ticket-type-banner" id="ticketType">
+                        FirstMonth-Student-West of England Zone
+                    </div>
+
+                    <!-- Passenger info -->
+                    <div class="info-section">
+                        <div class="info-row">
+                            <strong>Passenger:</strong
+                            ><span id="infoPassenger">Lin Wai Yan</span>
+                        </div>
+                        <div class="info-row">
+                            <strong>Purchased:</strong
+                            ><span id="infoPurchased">25/03/26 at 15:53</span>
+                        </div>
+                        <div class="info-row">
+                            <strong>Provider:</strong
+                            ><span id="infoProvider">First Bus Bristol</span>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <script>
-            const waiting = document.getElementById("waiting");
-            const resultView = document.getElementById("resultView");
-            const resultData = document.getElementById("resultData");
-            const typeBadge = document.getElementById("typeBadge");
-            const timeAgo = document.getElementById("timeAgo");
-            const openBtn = document.getElementById("openBtn");
-            const copyBtn = document.getElementById("copyBtn");
+            // ── Elements ──
+            const waitingState = document.getElementById("waitingState");
+            const ticketContent = document.getElementById("ticketContent");
+            const qrContainer = document.getElementById("qrCode");
+            const tDays = document.getElementById("tDays");
+            const tHours = document.getElementById("tHours");
+            const tMins = document.getElementById("tMins");
+            const tSecs = document.getElementById("tSecs");
+            const secRing = document.getElementById("secRing");
+            const liveClock = document.getElementById("liveClock");
+            const ticketType = document.getElementById("ticketType");
+            const infoPassenger = document.getElementById("infoPassenger");
+            const infoPurchased = document.getElementById("infoPurchased");
+            const infoProvider = document.getElementById("infoProvider");
             const wsDot = document.getElementById("wsDot");
             const wsLabel = document.getElementById("wsLabel");
-            const qrCodeContainer = document.getElementById("qrCode");
+
+            // ── Seconds ring constants ──
+            const CIRCUMFERENCE = 2 * Math.PI * 24; // r=24 → 150.796
+
+            // ── Live clock (updates every second) ──
+            function updateClock() {
+                const now = new Date();
+                const h = String(now.getHours()).padStart(2, "0");
+                const m = String(now.getMinutes()).padStart(2, "0");
+                liveClock.textContent = h + ":" + m;
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+
+            // ── Countdown target (22 days 9 hrs 26 mins from now as demo) ──
+            // When a real scan comes in, you'd decode the expiry from the QR data.
+            // For now we set a demo target from page load.
+            let countdownTarget =
+                Date.now() + (22 * 86400 + 9 * 3600 + 26 * 60 + 25) * 1000;
+            let countdownInterval = null;
+
+            function startCountdown(targetMs) {
+                countdownTarget = targetMs;
+                if (countdownInterval) clearInterval(countdownInterval);
+                countdownInterval = setInterval(tickCountdown, 1000);
+                tickCountdown(); // immediate first tick
+            }
+
+            function tickCountdown() {
+                const diff = Math.max(0, countdownTarget - Date.now());
+                const totalSecs = Math.floor(diff / 1000);
+                const days = Math.floor(totalSecs / 86400);
+                const hours = Math.floor((totalSecs % 86400) / 3600);
+                const mins = Math.floor((totalSecs % 3600) / 60);
+                const secs = totalSecs % 60;
+
+                tDays.textContent = days;
+                tHours.textContent = hours;
+                tMins.textContent = mins;
+                tSecs.textContent = secs;
+
+                // Ring: full circle = 0s, empty = 60s
+                // dashoffset goes from 0 (full) to CIRCUMFERENCE (empty) as secs goes 59→0
+                const fraction = secs / 60; // 1 = full circle, 0 = none
+                secRing.style.strokeDashoffset = CIRCUMFERENCE * (1 - fraction);
+            }
+
+            // ── QR generation ──
             let lastQRData = "";
 
-            let qrInstance;
-            let tsInterval;
+            function renderQR(data) {
+                if (data === lastQRData) return;
+                lastQRData = data;
+                qrContainer.innerHTML = "";
+                new QRCode(qrContainer, {
+                    text: data,
+                    width: 260,
+                    height: 260,
+                    correctLevel: QRCode.CorrectLevel.M,
+                });
+                // Make img fill container
+                setTimeout(() => {
+                    const img = qrContainer.querySelector("img");
+                    if (img) {
+                        img.style.width = "100%";
+                        img.style.height = "100%";
+                    }
+                    const cv = qrContainer.querySelector("canvas");
+                    if (cv) {
+                        cv.style.width = "100%";
+                        cv.style.height = "100%";
+                    }
+                }, 100);
+            }
 
+            // ── WebSocket ──
             const socket = io();
 
             socket.on("connect", () => {
@@ -109,63 +570,51 @@
             });
 
             socket.on("qr_result", (payload) => {
-                showResult(payload);
+                showTicket(payload);
             });
 
-            function showResult(payload) {
-                const { data, type, ts } = payload;
+            function showTicket(payload) {
+                const { data, type } = payload;
 
-                // TEXT DISPLAY
-                resultData.textContent = data;
+                // Show ticket UI
+                waitingState.style.display = "none";
+                ticketContent.classList.add("visible");
 
-                // TYPE BADGE
-                typeBadge.textContent = type;
+                // Render QR
+                renderQR(data);
 
-                // URL CHECK
-                if (type === "URL") {
-                    openBtn.style.display = "inline-block";
-                    openBtn.onclick = () => window.open(data, "_blank");
-                } else {
-                    openBtn.style.display = "none";
+                // Parse ticket data from QR (attempt JSON) or show raw
+                // If the QR encodes JSON with fields like {expiry, passenger, type, provider}:
+                let parsedExpiry = null;
+                try {
+                    const obj = JSON.parse(data);
+                    if (obj.expiry)
+                        parsedExpiry = new Date(obj.expiry).getTime();
+                    if (obj.passenger)
+                        infoPassenger.textContent = obj.passenger;
+                    if (obj.purchased)
+                        infoPurchased.textContent = obj.purchased;
+                    if (obj.provider) infoProvider.textContent = obj.provider;
+                    if (obj.ticketType) ticketType.textContent = obj.ticketType;
+                } catch (_) {
+                    // Not JSON — show the raw data as ticket type and keep demo defaults
+                    // Only update type display if it fits
+                    if (data.length < 60) ticketType.textContent = data;
                 }
 
-                // COPY
-                copyBtn.onclick = () => navigator.clipboard.writeText(data);
-
-                // TIME
-                updateTimeAgo(ts);
-                clearInterval(tsInterval);
-                tsInterval = setInterval(() => updateTimeAgo(ts), 15000);
-
-                // SHOW UI
-                waiting.style.display = "none";
-                resultView.style.opacity = "1";
-                resultView.style.pointerEvents = "all";
-
-                // ✅ QR GENERATION (INSTANT REPLACE)
-                // ✅ Only update if data changed
-                if (data !== lastQRData) {
-                    lastQRData = data;
-
-                    qrCodeContainer.innerHTML = "";
-
-                    new QRCode(qrCodeContainer, {
-                        text: data,
-                        width: 600,
-                        height: 600,
-                        useSVG: true,
-                    });
-                }
+                // Start/reset countdown
+                // Use parsed expiry if available, otherwise reset demo 22d 9h 26m 25s
+                const target =
+                    parsedExpiry ||
+                    Date.now() + (22 * 86400 + 9 * 3600 + 26 * 60 + 25) * 1000;
+                startCountdown(target);
             }
 
-            function updateTimeAgo(ts) {
-                if (!ts) return;
-                const diff = Math.floor((Date.now() - ts) / 1000);
-
-                if (diff < 5) timeAgo.textContent = "just now";
-                else if (diff < 60) timeAgo.textContent = diff + "s ago";
-                else timeAgo.textContent = Math.floor(diff / 60) + "m ago";
-            }
+            // ── Auto-start demo countdown so timer is live even before a scan ──
+            // (comment this out if you only want it to start on scan)
+            startCountdown(
+                Date.now() + (22 * 86400 + 9 * 3600 + 26 * 60 + 25) * 1000,
+            );
         </script>
     </body>
 </html>
