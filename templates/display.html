@@ -4,7 +4,7 @@
         <meta charset="UTF-8" />
         <meta
             name="viewport"
-            content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
         <title>QR Display</title>
         <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -35,8 +35,6 @@
 
             html,
             body {
-                margin: 0;
-                padding: 0;
                 min-height: 100%;
                 background: var(--bg);
                 font-family:
@@ -44,11 +42,6 @@
                     -apple-system,
                     sans-serif;
                 overflow-x: hidden;
-            }
-
-            .fullscreen {
-                height: 100vh;
-                width: 100vw;
             }
 
             /* ── App shell ── */
@@ -365,7 +358,7 @@
             }
         </style>
     </head>
-    <body class="fullscreen">
+    <body>
         <div class="app">
             <!-- Top bar -->
             <div class="topbar">
