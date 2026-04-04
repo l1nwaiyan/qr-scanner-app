@@ -63,7 +63,7 @@
             .topbar-title {
                 color: #fff;
                 font-size: 1.05rem;
-                font-weight: 700;
+                font-weight: 600;
                 letter-spacing: 0.01em;
                 text-align: center;
                 flex: 1;
@@ -181,7 +181,7 @@
             .timer-label {
                 text-align: center;
                 font-size: 0.65rem;
-                font-weight: 700;
+                font-weight: 500;
                 color: var(--pink);
                 letter-spacing: 0.04em;
                 text-transform: capitalize;
@@ -338,6 +338,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: 0.5rem;
+                background: #dededebc;
             }
 
             .info-row {
@@ -567,7 +568,6 @@
                     if (obj.purchased)
                         infoPurchased.textContent = obj.purchased;
                     if (obj.provider) infoProvider.textContent = obj.provider;
-                    if (obj.ticketType) ticketType.textContent = obj.ticketType;
                 } catch (_) {
                     // Not JSON — show the raw data as ticket type and keep demo defaults
                     // Only update type display if it fits
