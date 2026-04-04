@@ -559,20 +559,20 @@
                 // Parse ticket data from QR (attempt JSON) or show raw
                 // If the QR encodes JSON with fields like {expiry, passenger, type, provider}:
                 let parsedExpiry = null;
-                try {
-                    const obj = JSON.parse(data);
-                    if (obj.expiry)
-                        parsedExpiry = new Date(obj.expiry).getTime();
-                    if (obj.passenger)
-                        infoPassenger.textContent = obj.passenger;
-                    if (obj.purchased)
-                        infoPurchased.textContent = obj.purchased;
-                    if (obj.provider) infoProvider.textContent = obj.provider;
-                } catch (_) {
-                    // Not JSON — show the raw data as ticket type and keep demo defaults
-                    // Only update type display if it fits
-                    if (data.length < 60) ticketType.textContent = data;
-                }
+                // try {
+                //    const obj = JSON.parse(data);
+                //    if (obj.expiry)
+                //        parsedExpiry = new Date(obj.expiry).getTime();
+                //    if (obj.passenger)
+                //        infoPassenger.textContent = obj.passenger;
+                //    if (obj.purchased)
+                //        infoPurchased.textContent = obj.purchased;
+                //    if (obj.provider) infoProvider.textContent = obj.provider;
+                //} catch (_) {
+                //    // Not JSON — show the raw data as ticket type and keep demo defaults
+                //    // Only update type display if it fits
+                //    if (data.length < 60) ticketType.textContent = data;
+                //}
 
                 // Start/reset countdown
                 // Use parsed expiry if available, otherwise reset demo 22d 9h 26m 25s
