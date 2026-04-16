@@ -384,7 +384,7 @@
                     </svg>
                 </div>
                 <div>
-                    <h1>QR Scanner</h1>
+                    <h1>Aztec / QR Scanner</h1>
                     <small>SCANNER MODE</small>
                 </div>
                 <div class="ws-badge">
@@ -452,17 +452,24 @@
                 </svg>
                 <p>
                     Open <strong>/display</strong> on any other phone to see
-                    scan results instantly.
+                    scan results instantly. Supports
+                    <strong>Aztec</strong> &amp; QR codes.
                 </p>
             </div>
         </div>
 
-        <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-        <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-        <script>
+        <!--
+            ZXing Browser — supports QR Code, Aztec, Data Matrix, PDF417, Code128, etc.
+            Replaces jsQR which only handles QR codes.
+        -->
+        <script type="module">
+            import {
+                BrowserMultiFormatReader,
+                NotFoundException,
+            } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/esm/index.js";
+            import { io } from "https://cdn.socket.io/4.7.5/socket.io.esm.min.js";
+
             const video = document.getElementById("video");
-            const canvas = document.getElementById("canvas");
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
             const placeholder = document.getElementById("placeholder");
             const placeholderMsg = document.getElementById("placeholderMsg");
             const flash = document.getElementById("flash");
@@ -486,67 +493,48 @@
                 wsLabel.textContent = "offline";
             });
 
-            // ── Camera ──
+            // ── ZXing reader (multi-format: Aztec, QR, DataMatrix, PDF417 …) ──
+            const reader = new BrowserMultiFormatReader();
+
             async function startCamera() {
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            facingMode: { exact: "environment" },
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 },
-                        },
-                        audio: false,
-                    });
-                    initVideo(stream);
-                } catch {
-                    try {
-                        const stream =
-                            await navigator.mediaDevices.getUserMedia({
-                                video: true,
-                                audio: false,
-                            });
-                        initVideo(stream);
-                    } catch {
-                        placeholderMsg.textContent =
-                            "Camera access denied. Please allow in browser settings.";
-                    }
-                }
-            }
+                    // Prefer rear camera
+                    const devices =
+                        await BrowserMultiFormatReader.listVideoInputDevices();
+                    const rearDevice =
+                        devices.find((d) =>
+                            /back|rear|environment/i.test(d.label),
+                        ) || devices[devices.length - 1];
 
-            function initVideo(stream) {
-                video.srcObject = stream;
-                video.addEventListener("loadedmetadata", () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    const deviceId = rearDevice
+                        ? rearDevice.deviceId
+                        : undefined;
+
                     placeholder.classList.add("hidden");
-                    requestAnimationFrame(tick);
-                });
-            }
 
-            // ── Scan loop ──
-            function tick() {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const imageData = ctx.getImageData(
-                        0,
-                        0,
-                        canvas.width,
-                        canvas.height,
+                    await reader.decodeFromVideoDevice(
+                        deviceId,
+                        video,
+                        (result, err) => {
+                            if (result) {
+                                onDetected(
+                                    result.getText(),
+                                    result.getBarcodeFormat().toString(),
+                                );
+                            }
+                            // NotFoundException is normal (no code in frame) — suppress it
+                        },
                     );
-                    const code = jsQR(
-                        imageData.data,
-                        imageData.width,
-                        imageData.height,
-                        { inversionAttempts: "dontInvert" },
-                    );
-                    if (code && code.data && !cooldown) onDetected(code.data);
+                } catch (err) {
+                    placeholderMsg.textContent =
+                        "Camera access denied. Please allow in browser settings.";
+                    console.error("Camera error:", err);
                 }
-                requestAnimationFrame(tick);
             }
 
             // ── Detected ──
-            function onDetected(data) {
-                if (data === lastResult) return;
+            function onDetected(data, formatHint) {
+                if (data === lastResult || cooldown) return;
                 lastResult = data;
                 cooldown = true;
 
@@ -557,21 +545,27 @@
 
                 if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
 
-                // Detect type
+                // Determine content type
                 let type = "TEXT";
-                try {
-                    const u = new URL(data);
-                    type =
-                        u.protocol === "mailto:"
-                            ? "EMAIL"
-                            : u.protocol === "tel:"
-                              ? "PHONE"
-                              : "URL";
-                } catch {
-                    if (/^[^@]+@[^@]+\.[^@]+$/.test(data)) type = "EMAIL";
-                    else if (/^\+?[\d\s\-()+]{7,}$/.test(data)) type = "PHONE";
-                    else if (data.startsWith("WIFI:")) type = "WIFI";
-                    else if (data.startsWith("BEGIN:VCARD")) type = "CONTACT";
+                if (formatHint && formatHint.includes("AZTEC")) {
+                    type = "AZTEC";
+                } else {
+                    try {
+                        const u = new URL(data);
+                        type =
+                            u.protocol === "mailto:"
+                                ? "EMAIL"
+                                : u.protocol === "tel:"
+                                  ? "PHONE"
+                                  : "URL";
+                    } catch {
+                        if (/^[^@]+@[^@]+\.[^@]+$/.test(data)) type = "EMAIL";
+                        else if (/^\+?[\d\s\-()+]{7,}$/.test(data))
+                            type = "PHONE";
+                        else if (data.startsWith("WIFI:")) type = "WIFI";
+                        else if (data.startsWith("BEGIN:VCARD"))
+                            type = "CONTACT";
+                    }
                 }
 
                 // Emit to server → broadcast to all displays
@@ -584,7 +578,7 @@
                 setTimeout(() => {
                     cooldown = false;
                     lastResult = "";
-                }, 1000);
+                }, 1500);
             }
 
             startCamera();

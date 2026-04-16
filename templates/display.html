@@ -8,7 +8,11 @@
         />
         <title>QR Display</title>
         <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+        <!--
+            bwip-js: full barcode rendering library.
+            Supports Aztec, QR, DataMatrix, PDF417, Code128, and many more.
+        -->
+        <script src="https://cdn.jsdelivr.net/npm/bwip-js@4/dist/bwip-js-min.js"></script>
         <style>
             *,
             *::before,
@@ -85,7 +89,7 @@
 
             .topbar-spacer {
                 width: 32px;
-            } /* balances the close button */
+            }
 
             /* ── Ticket card ── */
             .ticket-card {
@@ -142,27 +146,31 @@
                 display: flex;
             }
 
-            /* QR section */
+            /* Aztec / barcode section */
             .qr-section {
                 padding: 2.2rem 1.5rem;
                 display: flex;
+                flex-direction: column;
                 justify-content: center;
                 align-items: center;
+                gap: 0.5rem;
             }
 
-            #qrCode {
+            #aztecCanvas {
                 width: 100%;
                 max-width: 240px;
                 aspect-ratio: 1;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                display: block;
+                image-rendering: pixelated; /* keep Aztec pixels crisp */
             }
 
-            #qrCode img,
-            #qrCode canvas {
-                width: 100% !important;
-                height: 100% !important;
+            .barcode-label {
+                font-size: 0.6rem;
+                font-weight: 600;
+                letter-spacing: 0.12em;
+                color: var(--text-light);
+                text-transform: uppercase;
+                margin-top: 0.25rem;
             }
 
             /* ── Timer section ── */
@@ -376,9 +384,12 @@
 
                 <!-- Ticket content -->
                 <div class="ticket-content" id="ticketContent">
-                    <!-- QR Code -->
+                    <!-- Aztec Barcode -->
                     <div class="qr-section">
-                        <div id="qrCode"></div>
+                        <canvas id="aztecCanvas"></canvas>
+                        <span class="barcode-label" id="barcodeLabel"
+                            >AZTEC</span
+                        >
                     </div>
 
                     <!-- Countdown timer -->
@@ -442,7 +453,8 @@
             // ── Elements ──
             const waitingState = document.getElementById("waitingState");
             const ticketContent = document.getElementById("ticketContent");
-            const qrContainer = document.getElementById("qrCode");
+            const aztecCanvas = document.getElementById("aztecCanvas");
+            const barcodeLabel = document.getElementById("barcodeLabel");
             const tDays = document.getElementById("tDays");
             const tHours = document.getElementById("tHours");
             const tMins = document.getElementById("tMins");
@@ -453,10 +465,8 @@
             const infoPassenger = document.getElementById("infoPassenger");
             const infoPurchased = document.getElementById("infoPurchased");
             const infoProvider = document.getElementById("infoProvider");
-            const wsDot = document.getElementById("wsDot");
-            const wsLabel = document.getElementById("wsLabel");
 
-            // ── Clock / YETI alternation (no animation — instant swap every 3s) ──
+            // ── Clock / YETI alternation ──
             let showingTime = true;
 
             function updateClock() {
@@ -478,14 +488,11 @@
                 }
             }
 
-            // Start: show time, update time every second, toggle every 3s
             updateClock();
             setInterval(updateClock, 1000);
             setInterval(toggleClockDisplay, 3000);
 
-            // ── Countdown target (22 days 9 hrs 26 mins from now as demo) ──
-            // When a real scan comes in, you'd decode the expiry from the QR data.
-            // For now we set a demo target from page load.
+            // ── Countdown ──
             let countdownTarget =
                 Date.now() + (22 * 86400 + 9 * 3600 + 26 * 60 + 25) * 1000;
             let countdownInterval = null;
@@ -494,49 +501,54 @@
                 countdownTarget = targetMs;
                 if (countdownInterval) clearInterval(countdownInterval);
                 countdownInterval = setInterval(tickCountdown, 1000);
-                tickCountdown(); // immediate first tick
+                tickCountdown();
             }
 
             function tickCountdown() {
                 const diff = Math.max(0, countdownTarget - Date.now());
                 const totalSecs = Math.floor(diff / 1000);
-                const days = Math.floor(totalSecs / 86400);
-                const hours = Math.floor((totalSecs % 86400) / 3600);
-                const mins = Math.floor((totalSecs % 3600) / 60);
-                const secs = totalSecs % 60;
-
-                tDays.textContent = days;
-                tHours.textContent = hours;
-                tMins.textContent = mins;
-                tSecs.textContent = secs;
+                tDays.textContent = Math.floor(totalSecs / 86400);
+                tHours.textContent = Math.floor((totalSecs % 86400) / 3600);
+                tMins.textContent = Math.floor((totalSecs % 3600) / 60);
+                tSecs.textContent = totalSecs % 60;
             }
 
-            // ── QR generation ──
-            let lastQRData = "";
+            // ── Aztec barcode rendering via bwip-js ──
+            let lastBarcodeData = "";
 
-            function renderQR(data) {
-                if (data === lastQRData) return;
-                lastQRData = data;
-                qrContainer.innerHTML = "";
-                new QRCode(qrContainer, {
-                    text: data,
-                    width: 260,
-                    height: 260,
-                    correctLevel: QRCode.CorrectLevel.M,
-                });
-                // Make img fill container
-                setTimeout(() => {
-                    const img = qrContainer.querySelector("img");
-                    if (img) {
-                        img.style.width = "100%";
-                        img.style.height = "100%";
+            function renderAztec(data) {
+                if (data === lastBarcodeData) return;
+                lastBarcodeData = data;
+
+                try {
+                    // bwip-js renders directly to the canvas element.
+                    // 'azteccode' is the bwip-js bcid for Aztec Code.
+                    bwipjs.toCanvas(aztecCanvas, {
+                        bcid: "azteccode",
+                        text: data,
+                        scale: 4, // pixel scale factor (crisp at any size)
+                        includetext: false, // no human-readable text under the code
+                        backgroundcolor: "ffffff",
+                        barcolor: "000000",
+                    });
+                    barcodeLabel.textContent = "AZTEC";
+                } catch (e) {
+                    // Fallback: if data is somehow unrenderable as Aztec, try QR
+                    console.warn("Aztec render failed, falling back to QR:", e);
+                    try {
+                        bwipjs.toCanvas(aztecCanvas, {
+                            bcid: "qrcode",
+                            text: data,
+                            scale: 4,
+                            eclevel: "M",
+                            backgroundcolor: "ffffff",
+                            barcolor: "000000",
+                        });
+                        barcodeLabel.textContent = "QR CODE";
+                    } catch (e2) {
+                        console.error("Barcode render failed entirely:", e2);
                     }
-                    const cv = qrContainer.querySelector("canvas");
-                    if (cv) {
-                        cv.style.width = "100%";
-                        cv.style.height = "100%";
-                    }
-                }, 100);
+                }
             }
 
             // ── WebSocket ──
@@ -553,37 +565,34 @@
                 waitingState.style.display = "none";
                 ticketContent.classList.add("visible");
 
-                // Render QR
-                renderQR(data);
+                // Render Aztec barcode
+                renderAztec(data);
 
-                // Parse ticket data from QR (attempt JSON) or show raw
-                // If the QR encodes JSON with fields like {expiry, passenger, type, provider}:
+                // Parse optional JSON fields
                 let parsedExpiry = null;
-                // try {
-                //    const obj = JSON.parse(data);
-                //    if (obj.expiry)
-                //        parsedExpiry = new Date(obj.expiry).getTime();
-                //    if (obj.passenger)
-                //        infoPassenger.textContent = obj.passenger;
-                //    if (obj.purchased)
-                //        infoPurchased.textContent = obj.purchased;
-                //    if (obj.provider) infoProvider.textContent = obj.provider;
-                //} catch (_) {
-                //    // Not JSON — show the raw data as ticket type and keep demo defaults
-                //    // Only update type display if it fits
-                //    if (data.length < 60) ticketType.textContent = data;
-                //}
+                try {
+                    const obj = JSON.parse(data);
+                    if (obj.expiry)
+                        parsedExpiry = new Date(obj.expiry).getTime();
+                    if (obj.passenger)
+                        infoPassenger.textContent = obj.passenger;
+                    if (obj.purchased)
+                        infoPurchased.textContent = obj.purchased;
+                    if (obj.provider) infoProvider.textContent = obj.provider;
+                    if (obj.ticketType && obj.ticketType.length < 80)
+                        ticketType.textContent = obj.ticketType;
+                } catch (_) {
+                    // Not JSON — show raw data as ticket type label if short enough
+                    if (data.length < 60) ticketType.textContent = data;
+                }
 
-                // Start/reset countdown
-                // Use parsed expiry if available, otherwise reset demo 22d 9h 26m 25s
                 const target =
                     parsedExpiry ||
                     Date.now() + (22 * 86400 + 9 * 3600 + 26 * 60 + 25) * 1000;
                 startCountdown(target);
             }
 
-            // ── Auto-start demo countdown so timer is live even before a scan ──
-            // (comment this out if you only want it to start on scan)
+            // Auto-start demo countdown
             startCountdown(
                 Date.now() + (22 * 86400 + 9 * 3600 + 26 * 60 + 25) * 1000,
             );
